@@ -819,6 +819,11 @@ end
 
 # The future
 
+(WiP)
+
+* Endpoint objects
+* Input and output schemas
+* Generated docs
 ---
 
 ## links, etc
