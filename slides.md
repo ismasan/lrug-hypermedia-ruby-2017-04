@@ -245,6 +245,10 @@ response = link.run(
 
 ---
 
+^ an entity wraps an entire JSON response
+^ and provides accessors for properties, links
+^ and embedded entities
+
 ```ruby
 order = Entity.new(json_data, client)
 ```
