@@ -246,13 +246,13 @@ response = link.run(
 ---
 
 ```ruby
-entity = Entity.new(json_data, client)
+order = Entity.new(json_data, client)
 ```
 
 ---
 
 ```ruby
-entity = Entity.new({
+order = Entity.new({
   "_links": {
     "place_order": {
       "href": "https://api.com/orders/123/place",
@@ -291,7 +291,7 @@ class Entity
   def method_missing(method_name, *args, &block)
     if @data[method_name]
       @data[method_name]
-    elsif @links[method_name]
+    elsif ...
       ...
     else
       super
@@ -327,6 +327,9 @@ order.status # "open"
 
 ---
 
+^ Looks like RPC, but it's valid REST
+Separate domain operations from transport
+
 ```ruby
 # PUT https://api.com/orders/123/place
 
@@ -357,7 +360,6 @@ end
 
 ---
 
-
 ```ruby
 # PUT https://api.com/orders/123/place
 
@@ -369,6 +371,59 @@ updated_order.status # "placed"
 ```
 
 ---
+
+^ API returns conditional links
+^ depending on resource state
+
+```
+GET /orders/:id
+```
+
+```json
+{
+  "_links": {
+    "start_order_fulfillment": {
+      "href": "https://api.com/orders/123/fulfillments",
+      "method": "post"
+    }
+  },
+  "updated_at": "2017-04-10T18:30Z",
+  "id": 123,
+  "status": "placed",
+  "total" 1000
+}
+```
+
+---
+
+```ruby
+if order.can?(:place_order)
+  # PUT https://api.com/orders/123/place
+  order = order.place_order
+end
+
+if order.can?(:start_order_fulfillment)
+  # POST https://api.com/orders/123/fulfillments
+  fulfillment = order.start_order_fulfillment(...)
+end
+
+```
+
+---
+
+^ #can? syntax sugar
+
+```ruby
+class Entity
+  ...
+
+  def can?(link_name)
+    !!@links[link_name.to_s]
+  end
+end
+```
+
+------
 
 # Root resource
 
@@ -486,7 +541,7 @@ page.each do |order|
   ...
 end
 
-page = page.next if page.respond_to?(:next)
+page = page.next if page.can?(:next)
 ```
 
 ---
@@ -498,7 +553,7 @@ def to_enum
   Enumerator.new do |yielder|
     loop do
       page.each{|item| yielder.yield item }
-      raise StopIteration unless page.respond_to?(:next)
+      raise StopIteration unless page.can?(:next)
       page = page.next
     end
   end
@@ -535,4 +590,235 @@ all_orders.find_all{|o| o.total > 200 }
 
 ---
 
-## The server
+# The server
+
+---
+
+^ nothing special about the server
+^ JBuilder example. A bit verbose.
+
+```ruby
+# app/views/orders/show.json.jbuilder
+json._links do
+  if @order.open?
+    json.place_order do
+      json.href place_order_url(@order)
+      json.method :put
+    end
+  end
+end
+
+json.id @order.id
+json.status @order.status
+#... etc
+```
+
+---
+
+^ Roar. "message oriented"
+
+```ruby
+# https://github.com/trailblazer/roar#hypermedia
+require 'roar/json/hal'
+
+class OrderRepresenter < Roar::Decorator
+  include Roar::JSON::HAL
+
+  link :place_order do
+    place_order_url to_param
+  end
+
+  property :id
+  property :status
+end
+```
+
+---
+
+^ Oat
+
+```ruby
+# https://github.com/ismasan/oat
+class OrderSerializer < Oat::Serializer
+  adapter Oat::Adapters::HAL
+
+  schema do
+    if item.open?
+      link :place_order, href: place_order_url(item)
+    end
+
+    property :id, item.id
+    property :status, item.status
+  end
+end
+```
+
+---
+
+* Rails
+* Grape
+* Sinatra
+* Hanami
+
+---
+
+# Testing
+
+---
+
+^ Bootic client
+^ Based on Faraday
+
+github.com/bootic/bootic_client.rb
+
+```ruby
+client = BooticClient.client(:bearer, access_token: "abc")
+
+root = client.root
+products = root.products(status: "all")
+```
+
+---
+
+^ Faraday Rack adapter
+
+github.com/lostisland/faraday
+
+```ruby
+class MyRackApp
+  def call(env)
+    [200, {'Content-Type' => 'text/html'}, ["hello world"]]
+  end
+end
+```
+
+---
+
+github.com/lostisland/faraday
+
+```ruby
+client = Faraday.new do |conn|
+  conn.adapter :rack, MyRackApp.new
+end
+```
+
+---
+
+github.com/lostisland/faraday
+
+```ruby
+response = client.get("/")
+# "hello world"
+```
+
+---
+
+^ configure hypermedia client
+^ to talk to your Rack app
+
+```ruby
+# spec/support/request_helpers.rb
+BooticClient.configure do |c|
+  c.api_root = "http://example.org"
+end
+
+def client
+  BooticClient.client(
+    :bearer,
+    access_token: "test",
+    faraday_adapter: [:rack, MyRackApp]
+  )
+end
+```
+
+---
+
+^ Test workflows
+
+```ruby
+describe "managing orders" do
+  it "navigates to root and creates order" do
+    root = client.root
+    order = root.create_order(line_items: [etc])
+
+    expect(order.status).to eq "open"
+    expect(order.line_items.size).to eq 1
+  end
+end
+```
+
+---
+
+```ruby
+  it "places an order" do
+    root = client.root
+    order = root
+      .create_order(line_items: [etc])
+      .place_order
+
+    expect(order.status).to eq "placed"
+    expect(order.can?(:place_order)).to be false
+  end
+```
+
+---
+
+^ errors
+^ I have my own conventions but it's up to you
+
+```ruby
+# 422 Unprocessable Entity
+```
+
+```json
+{
+  "errors": [
+    {"field": "status", "messages": ["is invalid"]}
+  ]
+}
+```
+
+---
+
+```ruby
+expect(order).to respond_to :errors
+expect(order.errors.first.field).to eq "status"
+```
+
+---
+
+Debugging console
+
+```ruby
+# console.rb
+require 'irb/ext/multi-irb'
+
+def client
+  BooticClient.client(
+    :bearer,
+    access_token: "test",
+    faraday_adapter: [:rack, MyRackApp]
+  )
+end
+
+IRB.irb nil, self
+```
+
+---
+
+```ruby
+# irb -r console.rb
+
+root = client.root
+root.orders.each |o|
+  puts o.total
+end
+```
+
+---
+
+# The future
+
+---
+
+## links, etc
