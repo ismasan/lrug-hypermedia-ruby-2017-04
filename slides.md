@@ -1,6 +1,13 @@
-## Hypermedia APIs
+<br />
+# Hypermedia APIs
+## And Ruby
 
-### And Ruby
+<br />
+<br />
+
+```ruby
+# Ismael Celis / @ismasan / Thoughtbot London
+```
 
 ^ * Hypermedia / REST broad subject, theoretical
 * I'll focus on one aspect (links) and show concrete examples
