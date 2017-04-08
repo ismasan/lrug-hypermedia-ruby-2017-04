@@ -1,3 +1,5 @@
+slidenumbers: true
+
 <br />
 # Hypermedia APIs
 ## And Ruby
@@ -26,7 +28,7 @@ GET /orders/:id
   "updated_at": "2017-04-10T18:30Z",
   "id": 123,
   "status": "open",
-  "total" 1000
+  "total": 1000
 }
 ```
 
@@ -43,7 +45,7 @@ PUT /orders/:id/place
   "updated_at": "2017-04-10T18:40Z",
   "id": 123,
   "status": "placed",
-  "total" 1000
+  "total": 1000
 }
 ```
 
@@ -140,7 +142,7 @@ GET /orders/:id
   "updated_at": "2017-04-10T18:30Z",
   "id": 123,
   "status": "open",
-  "total" 1000
+  "total": 1000
 }
 ```
 
@@ -163,7 +165,7 @@ GET /orders/:id
   "updated_at": "2017-04-10T18:30Z",
   "id": 123,
   "status": "open",
-  "total" 1000
+  "total": 1000
 }
 ```
 
@@ -188,7 +190,7 @@ order = Entity.new({
   "updated_at": "2017-04-10T18:30Z",
   "id": 123,
   "status": "open",
-  "total" 1000
+  "total": 1000
 }, http_client)
 ```
 
@@ -377,7 +379,7 @@ GET /orders/:id
   "updated_at": "2017-04-10T18:30Z",
   "id": 123,
   "status": "placed",
-  "total" 1000
+  "total": 1000
 }
 ```
 
@@ -663,39 +665,7 @@ end
 
 ---
 
-^ Bootic client
-^ Based on Faraday
-
-```ruby
-# github.com/lostisland/faraday
-```
-
-```ruby
-http_client = Faraday.new do |conn|
-  conn.adapter  Faraday.default_adapter
-end
-
-http_client.get("/orders/123")
-
-http_client.put("/orders/123/place")
-```
-
----
-
-^ Faraday Rack adapter
-
-```ruby
-# github.com/lostisland/faraday
-```
-
-```ruby
-http_client = Faraday.new do |conn|
-  conn.adapter :rack, MyRackApp.new
-end
-```
-
----
-
+^ Fadaray Rack adapter
 ^ configure hypermedia client
 ^ to talk to your Rack app
 
@@ -743,30 +713,6 @@ end
 
 ---
 
-^ errors
-^ I have my own conventions but it's up to you
-
-```ruby
-# 422 Unprocessable Entity
-```
-
-```json
-{
-  "errors": [
-    {"field": "status", "messages": ["is invalid"]}
-  ]
-}
-```
-
----
-
-```ruby
-expect(order).to respond_to :errors
-expect(order.errors.first.field).to eq "status"
-```
-
----
-
 Debugging console
 
 ```ruby
@@ -809,8 +755,10 @@ Thanks!
 
 ```ruby
 # github.com/bootic/bootic_client.rb
-# github.com/trailblazer/roar
 
 # stateless.co/hal_specification.html
 ```
 
+```ruby
+# @ismasan
+```
