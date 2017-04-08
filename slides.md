@@ -6,7 +6,7 @@
 <br />
 
 ```ruby
-# Ismael Celis / @ismasan / Thoughtbot London
+# Ismael Celis / @ismasan / thoughtbot London
 ```
 
 ^ * Hypermedia / REST broad subject, theoretical
@@ -14,12 +14,7 @@
 
 ---
 
-^ disrgarded in the Ruby community?
-
-![fit](assets/dhh.png)
-
----
-
+^ how we write API clients in Ruby
 ^ regular JSON response
 
 ```
@@ -93,10 +88,6 @@ order = Client.place_order(123)
 
 ---
 
-![fit](assets/stripe-client.png)
-
----
-
 # Links
 
 ^ central to REST APIs.
@@ -146,7 +137,7 @@ GET /orders/:id
 
 ```json
 {
-  "udpated_at": "2017-04-10T18:30Z",
+  "updated_at": "2017-04-10T18:30Z",
   "id": 123,
   "status": "open",
   "total" 1000
@@ -178,6 +169,75 @@ GET /orders/:id
 
 ---
 
+# The client
+
+---
+
+^ an entity wraps an entire JSON response
+^ and provides accessors for properties, links
+^ and embedded entities
+
+```ruby
+order = Entity.new({
+  "_links": {
+    "place_order": {
+      "href": "https://api.com/orders/123/place",
+      "method": "put"
+    }
+  },
+  "updated_at": "2017-04-10T18:30Z",
+  "id": 123,
+  "status": "open",
+  "total" 1000
+}, http_client)
+```
+
+---
+
+```ruby
+order = Entity.new(json_data, http_client)
+
+order.id # 123
+order.status # "open"
+```
+
+---
+
+```ruby
+class Entity
+  def initialize(data, http_client)
+    @data = data
+    @links = @data.fetch("_links", {})
+    @client = http_client
+  end
+
+  ...
+end
+```
+
+---
+
+^ don't forget respond_to_missing
+
+```ruby
+class Entity
+  ...
+
+  def method_missing(method_name, *args, &block)
+    if @data[method_name]
+      @data[method_name]
+      ...
+    else
+      super
+    end
+  end
+end
+```
+
+---
+
+^ now let's deal with links
+
 ```json
   "_links": {
     "place_order": {
@@ -189,18 +249,31 @@ GET /orders/:id
 
 ---
 
-# The client
+```ruby
+def method_missing(method_name, *args, &block)
+  ...
+
+  elsif @links[method_name]
+    Link.new(
+      @links[method_name], @client
+    ).run(*args)
+
+  ...
+end
+```
 
 ---
+
+^ a Link represents a link that can be run
 
 ```ruby
 class Link
   attr_reader :request_method, :href
 
-  def initialize(attrs, client)
+  def initialize(attrs, http_client)
     @request_method = attrs.fetch("method", :get).to_sym
     @href = attrs["href"]
-    @client = client
+    @client = http_client
   end
   ...
 end
@@ -231,7 +304,7 @@ end
 link = Link.new({
   "href": "https://api.com/orders/123/place",
   "method": "put"
-}, client)
+}, http_client)
 ```
 
 ---
@@ -252,106 +325,6 @@ response = link.run(
 
 ---
 
-^ an entity wraps an entire JSON response
-^ and provides accessors for properties, links
-^ and embedded entities
-
-```ruby
-order = Entity.new(json_data, client)
-```
-
----
-
-```ruby
-order = Entity.new({
-  "_links": {
-    "place_order": {
-      "href": "https://api.com/orders/123/place",
-      "method": "put"
-    }
-  },
-  "updated_at": "2017-04-10T18:30Z",
-  "id": 123,
-  "status": "open",
-  "total" 1000
-}, client)
-```
-
----
-
-```ruby
-class Entity
-  def initialize(data, client)
-    @data = data
-    @links = @data.fetch("_links", {})
-    @client = client
-  end
-
-  ...
-end
-```
-
----
-
-^ don't forget respond_to_missing
-
-```ruby
-class Entity
-  ...
-
-  def method_missing(method_name, *args, &block)
-    if @data[method_name]
-      @data[method_name]
-    elsif ...
-      ...
-    else
-      super
-    end
-  end
-end
-```
-
----
-
-
-```ruby
-def method_missing(method_name, *args, &block)
-  ...
-
-  elsif @links[method_name]
-    Link.new(
-      @links[method_name], @client
-    ).run(*args)
-
-  ...
-end
-```
-
----
-
-```ruby
-order = Entity.new(json_data, client)
-
-order.id # 123
-order.status # "open"
-```
-
----
-
-^ Looks like RPC, but it's valid REST
-Separate domain operations from transport
-
-```ruby
-# PUT https://api.com/orders/123/place
-
-order.place_order(
-  discount_code: "freestuff"
-)
-```
-
----
-
-
 ```ruby
 class Link
   ...
@@ -364,12 +337,15 @@ class Link
         # etc
     end
 
-    Entity.new(response.body, client)
+    Entity.new(response.body, @client)
   end
 end
 ```
 
 ---
+
+^ Looks like RPC, but it's valid REST
+Separate domain operations from transport
 
 ```ruby
 # PUT https://api.com/orders/123/place
@@ -434,6 +410,23 @@ class Entity
 end
 ```
 
+---
+
+^ API client
+
+```ruby
+class ApiClient
+  def initialize(root_url, http_client)
+    @root_url, @client = root_url, http_client
+  end
+
+  def root(url = @root_url)
+    response = @client.get(url)
+    Entity.new(response.body, @client)
+  end
+end
+```
+
 ------
 
 # Root resource
@@ -458,23 +451,14 @@ GET /
 
 ---
 
-
-```ruby
-def load(url)
-  response = client.get(url)
-  Entity.new(response.body, client)
-end
-```
-
----
-
 # Workflows
 
 ```ruby
-api = Client.load("https://api.com")
+api = ApiClient.new("https://api.com", SomeHttpClient)
+root = api.root
 
 # create order
-order = api.create_order(line_items: [...])
+order = root.create_order(line_items: [...])
 
 # add items
 order.add_line_item(id: "iphone", quantity: 2)
@@ -489,7 +473,7 @@ order = order.place_order
 
 ```ruby
 # list orders
-orders = api.orders(sort: "total.desc")
+orders = root.orders(sort: "total.desc")
 
 orders.each do |order|
   puts order.total
@@ -591,13 +575,34 @@ all_orders.find_all{|o| o.total > 200 }
 
 ---
 
+^ chat bot example
+^ same pattern everywhere
+
+![fit](assets/slack-bot.png)
+
+---
+
+# Documentation
+
+---
+
+^ document workflows. Context.
+
 ![fit](assets/bootic-docs.png)
 
 ---
 
-^ same pattern everywhere
+^ document relations
 
-![fit](assets/slack-bot.png)
+![original 130%](assets/bootic-docs-rel.png)
+
+---
+
+```ruby
+order.rels[:create_order].docs
+
+# https://docs.api.com/rels/create_order
+```
 
 ---
 
@@ -646,30 +651,11 @@ end
 
 ---
 
-^ Oat
-
-```ruby
-# https://github.com/ismasan/oat
-class OrderSerializer < Oat::Serializer
-  adapter Oat::Adapters::HAL
-
-  schema do
-    if item.open?
-      link :place_order, href: place_order_url(item)
-    end
-
-    property :id, item.id
-    property :status, item.status
-  end
-end
-```
-
----
-
 * Rails
 * Grape
 * Sinatra
 * Hanami
+* Trailblazer
 
 ---
 
@@ -680,46 +666,32 @@ end
 ^ Bootic client
 ^ Based on Faraday
 
-github.com/bootic/bootic_client.rb
+```ruby
+# github.com/lostisland/faraday
+```
 
 ```ruby
-client = BooticClient.client(:bearer, access_token: "abc")
+http_client = Faraday.new do |conn|
+  conn.adapter  Faraday.default_adapter
+end
 
-root = client.root
-products = root.products(status: "all")
+http_client.get("/orders/123")
+
+http_client.put("/orders/123/place")
 ```
 
 ---
 
 ^ Faraday Rack adapter
 
-github.com/lostisland/faraday
-
 ```ruby
-class MyRackApp
-  def call(env)
-    [200, {'Content-Type' => 'text/html'}, ["hello world"]]
-  end
-end
+# github.com/lostisland/faraday
 ```
 
----
-
-github.com/lostisland/faraday
-
 ```ruby
-client = Faraday.new do |conn|
+http_client = Faraday.new do |conn|
   conn.adapter :rack, MyRackApp.new
 end
-```
-
----
-
-github.com/lostisland/faraday
-
-```ruby
-response = client.get("/")
-# "hello world"
 ```
 
 ---
@@ -729,16 +701,13 @@ response = client.get("/")
 
 ```ruby
 # spec/support/request_helpers.rb
-BooticClient.configure do |c|
-  c.api_root = "http://example.org"
-end
 
 def client
-  BooticClient.client(
-    :bearer,
-    access_token: "test",
-    faraday_adapter: [:rack, MyRackApp]
-  )
+  http_client = Faraday.new do |conn|
+    conn.adapter :rack, MyRackApp.new
+  end
+
+  ApiClient.new("http://example.org", http_client)
 end
 ```
 
@@ -805,11 +774,11 @@ Debugging console
 require 'irb/ext/multi-irb'
 
 def client
-  BooticClient.client(
-    :bearer,
-    access_token: "test",
-    faraday_adapter: [:rack, MyRackApp]
-  )
+  http_client = Faraday.new do |conn|
+    conn.adapter :rack, MyRackApp.new
+  end
+
+  ApiClient.new("http://example.org", http_client)
 end
 
 IRB.irb nil, self
@@ -828,13 +797,20 @@ end
 
 ---
 
-# The future
-
-(WiP)
+# To be continued...
 
 * Endpoint objects
 * Input and output schemas
 * Generated docs
+
 ---
 
-## links, etc
+Thanks!
+
+```ruby
+# github.com/bootic/bootic_client.rb
+# github.com/trailblazer/roar
+
+# stateless.co/hal_specification.html
+```
+
