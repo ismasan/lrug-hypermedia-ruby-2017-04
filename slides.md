@@ -666,23 +666,6 @@ end
 ---
 
 ^ Fadaray Rack adapter
-^ configure hypermedia client
-^ to talk to your Rack app
-
-```ruby
-# spec/support/request_helpers.rb
-
-def client
-  http_client = Faraday.new do |conn|
-    conn.adapter :rack, MyRackApp.new
-  end
-
-  ApiClient.new("http://example.org", http_client)
-end
-```
-
----
-
 ^ Test workflows
 
 ```ruby
@@ -720,10 +703,6 @@ Debugging console
 require 'irb/ext/multi-irb'
 
 def client
-  http_client = Faraday.new do |conn|
-    conn.adapter :rack, MyRackApp.new
-  end
-
   ApiClient.new("http://example.org", http_client)
 end
 
@@ -740,14 +719,6 @@ root.orders.each |o|
   puts o.total
 end
 ```
-
----
-
-# To be continued...
-
-* Endpoint objects
-* Input and output schemas
-* Generated docs
 
 ---
 
