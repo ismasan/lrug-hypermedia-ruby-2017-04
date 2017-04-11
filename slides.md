@@ -1,5 +1,3 @@
-slidenumbers: true
-
 <br />
 # Hypermedia APIs
 ## And Ruby
